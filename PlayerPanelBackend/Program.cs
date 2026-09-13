@@ -4,6 +4,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddSingleton<OnlinePlayersService>();
 builder.Services.AddSingleton<LeaderboardCache>();
+builder.Services.AddSingleton<PlayerNameResolver>();
 builder.Services.AddHostedService<LeaderboardMySqlSyncService>();
 
 // Allow the Next.js frontend (different origin in dev/prod) to call this API.

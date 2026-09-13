@@ -5,23 +5,33 @@ namespace PlayerPanelBackend.Services;
 
 /// <summary>
 /// Periodically connects to MySQL and reads leaderboard data out of
-/// ajLeaderboards' shared "ajlb_extras" table (confirmed against the real
-/// production server on 2026-09-13 — see LeaderboardsConfig for the shape).
-/// One row per (player UUID, placeholder) pair; categories are just
-/// different placeholder keys filtered out of the same table, and player
-/// names come from a "player_name" placeholder row joined in by UUID.
+/// ajLeaderboards' shared "ajlb_extras" table. Each row is (player UUID,
+/// placeholder, value); categories are just different placeholder keys.
+/// Usernames are NOT stored by the plugin (it refuses non-numeric
+/// placeholders like %player_name%), so they're resolved via
+/// PlayerNameResolver, which learns UUID->name pairs from the Server List
+/// Ping "sample" every cycle.
 /// </summary>
 public class LeaderboardMySqlSyncService : BackgroundService
 {
     private static readonly Regex ValidIdentifier = new("^[A-Za-z0-9_]+$", RegexOptions.Compiled);
 
     private readonly LeaderboardCache _cache;
+    private readonly PlayerNameResolver _names;
+    private readonly OnlinePlayersService _onlinePlayers;
     private readonly IConfiguration _config;
     private readonly ILogger<LeaderboardMySqlSyncService> _logger;
 
-    public LeaderboardMySqlSyncService(LeaderboardCache cache, IConfiguration config, ILogger<LeaderboardMySqlSyncService> logger)
+    public LeaderboardMySqlSyncService(
+        LeaderboardCache cache,
+        PlayerNameResolver names,
+        OnlinePlayersService onlinePlayers,
+        IConfiguration config,
+        ILogger<LeaderboardMySqlSyncService> logger)
     {
         _cache = cache;
+        _names = names;
+        _onlinePlayers = onlinePlayers;
         _config = config;
         _logger = logger;
     }
@@ -33,12 +43,13 @@ public class LeaderboardMySqlSyncService : BackgroundService
 
         if (leaderboards.Sources.Count == 0)
         {
-            _logger.LogWarning(
-                "No leaderboard sources configured under Leaderboards:Sources — sync loop is idle.");
+            _logger.LogWarning("No leaderboard sources configured under Leaderboards:Sources — sync loop is idle.");
         }
 
         while (!stoppingToken.IsCancellationRequested)
         {
+            await LearnOnlinePlayerNamesAsync(stoppingToken);
+
             if (leaderboards.Sources.Count > 0)
             {
                 try
@@ -59,6 +70,21 @@ public class LeaderboardMySqlSyncService : BackgroundService
             {
                 // shutting down
             }
+        }
+    }
+
+    private async Task LearnOnlinePlayerNamesAsync(CancellationToken ct)
+    {
+        try
+        {
+            var status = await _onlinePlayers.QueryAsync(ct);
+            if (status is null) return;
+            foreach (var p in status.Sample)
+                _names.Learn(p.Id, p.Name);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to refresh the player name cache from Server List Ping.");
         }
     }
 
@@ -89,8 +115,7 @@ public class LeaderboardMySqlSyncService : BackgroundService
             !ValidIdentifier.IsMatch(leaderboards.PlaceholderColumn) ||
             !ValidIdentifier.IsMatch(leaderboards.ValueColumn))
         {
-            _logger.LogWarning(
-                "Leaderboards table/column names in config are invalid (letters, digits, underscores only) — skipping sync.");
+            _logger.LogWarning("Leaderboards table/column names in config are invalid — skipping sync.");
             return;
         }
 
@@ -121,34 +146,37 @@ public class LeaderboardMySqlSyncService : BackgroundService
         MySqlConnection connection, LeaderboardsConfig cfg, LeaderboardSource source, CancellationToken ct)
     {
         var sql = $@"
-            SELECT n.`{cfg.ValueColumn}` AS name, v.`{cfg.ValueColumn}` AS value
-            FROM `{cfg.TableName}` v
-            JOIN `{cfg.TableName}` n
-              ON n.`{cfg.IdColumn}` = v.`{cfg.IdColumn}`
-             AND n.`{cfg.PlaceholderColumn}` = @namePlaceholder
-            WHERE v.`{cfg.PlaceholderColumn}` = @valuePlaceholder
-              AND v.`{cfg.ValueColumn}` REGEXP '^[0-9.]+$'
-            ORDER BY CAST(v.`{cfg.ValueColumn}` AS DECIMAL(30,4)) DESC
+            SELECT `{cfg.IdColumn}` AS id, `{cfg.ValueColumn}` AS value
+            FROM `{cfg.TableName}`
+            WHERE `{cfg.PlaceholderColumn}` = @placeholderKey
+              AND `{cfg.ValueColumn}` REGEXP '^[0-9.]+$'
+            ORDER BY CAST(`{cfg.ValueColumn}` AS DECIMAL(30,4)) DESC
             LIMIT {source.Limit}";
 
         await using var cmd = new MySqlCommand(sql, connection);
-        cmd.Parameters.AddWithValue("@namePlaceholder", cfg.NamePlaceholderKey);
-        cmd.Parameters.AddWithValue("@valuePlaceholder", source.PlaceholderKey);
+        cmd.Parameters.AddWithValue("@placeholderKey", source.PlaceholderKey);
 
         await using var reader = await cmd.ExecuteReaderAsync(ct);
 
-        var raw = new List<(string Name, double Value)>();
+        var raw = new List<(string Id, double Value)>();
         while (await reader.ReadAsync(ct))
         {
-            var name = reader.IsDBNull(0) ? null : reader.GetString(0);
-            if (string.IsNullOrWhiteSpace(name)) continue;
+            var id = reader.GetString(0);
             if (!double.TryParse(reader.GetString(1), out var value)) continue;
-            raw.Add((name!, value));
+            raw.Add((id, value));
         }
 
-        return raw
-            .Select((p, i) => new LeaderboardEntry(i + 1, p.Name, FormatValue(p.Value, source)))
-            .ToList();
+        var entries = new List<LeaderboardEntry>();
+        var rank = 0;
+        foreach (var row in raw)
+        {
+            var name = _names.TryResolve(row.Id);
+            if (name is null) continue; // haven't seen this player online yet -- skip rather than show a raw UUID
+            rank++;
+            entries.Add(new LeaderboardEntry(rank, name, FormatValue(row.Value, source)));
+        }
+
+        return entries;
     }
 
     private static string FormatValue(double rawValue, LeaderboardSource source)
