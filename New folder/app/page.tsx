@@ -1,4 +1,5 @@
 import LeaderboardCard from "@/components/LeaderboardCard";
+import PlayerSearch from "@/components/PlayerSearch";
 import { getLeaderboards, getPlayers } from "@/lib/api";
 
 export default async function HomePage() {
@@ -34,6 +35,10 @@ export default async function HomePage() {
           <button className="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold hover:bg-accentText">
             Copy
           </button>
+        </div>
+        
+        <div className="mx-auto mt-4 max-w-sm">
+          <PlayerSearch placeholder="Look up a player's stats..." />
         </div>
 
         <div className="mx-auto mt-6 flex max-w-sm justify-center gap-8 text-sm">

@@ -5,6 +5,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddSingleton<OnlinePlayersService>();
 builder.Services.AddSingleton<LeaderboardCache>();
 builder.Services.AddSingleton<PlayerNameResolver>();
+builder.Services.AddSingleton<PlayerStatsService>();
 builder.Services.AddHostedService<LeaderboardMySqlSyncService>();
 
 // Allow the Next.js frontend (different origin in dev/prod) to call this API.
@@ -59,5 +60,12 @@ app.MapGet("/api/leaderboards/{category}", (string category, LeaderboardCache ca
     var entries = cache.GetCategory(category);
     return entries is null ? Results.NotFound() : Results.Ok(entries);
 });
+
+app.MapGet("/api/players/{username}", async (string username, PlayerStatsService svc) =>
+{
+    var profile = await svc.GetProfileAsync(username);
+    return profile is null ? Results.NotFound() : Results.Ok(profile);
+});
+
 
 app.Run();

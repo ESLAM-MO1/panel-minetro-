@@ -115,3 +115,25 @@ export async function getLeaderboards(): Promise<
     return {};
   }
 }
+
+
+export interface PlayerProfile {
+  username: string;
+  uuid: string;
+  stats: Partial<Record<LeaderboardCategory, string>>;
+}
+
+export async function getPlayerProfile(
+  username: string
+): Promise<PlayerProfile | null> {
+  try {
+    const res = await fetch(
+      `${API_BASE}/api/players/${encodeURIComponent(username)}`,
+      { cache: "no-store" }
+    );
+    if (!res.ok) return null;
+    return (await res.json()) as PlayerProfile;
+  } catch {
+    return null;
+  }
+}

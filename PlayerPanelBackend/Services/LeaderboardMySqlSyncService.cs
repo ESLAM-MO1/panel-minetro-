@@ -173,27 +173,9 @@ public class LeaderboardMySqlSyncService : BackgroundService
             var name = _names.TryResolve(row.Id);
             if (name is null) continue; // haven't seen this player online yet -- skip rather than show a raw UUID
             rank++;
-            entries.Add(new LeaderboardEntry(rank, name, FormatValue(row.Value, source)));
+                        entries.Add(new LeaderboardEntry(rank, name, LeaderboardFormatting.FormatValue(row.Value, source)));
         }
 
         return entries;
-    }
-
-    private static string FormatValue(double rawValue, LeaderboardSource source)
-    {
-        var value = source.Divisor is > 0 ? rawValue / source.Divisor.Value : rawValue;
-
-        if (string.Equals(source.NumberFormat, "duration", StringComparison.OrdinalIgnoreCase))
-            return FormatDuration(value);
-
-        return value.ToString(source.NumberFormat ?? "N0");
-    }
-
-    private static string FormatDuration(double totalSeconds)
-    {
-        var span = TimeSpan.FromSeconds(Math.Max(0, totalSeconds));
-        return span.TotalDays >= 1
-            ? $"{(int)span.TotalDays}d {span.Hours}h"
-            : $"{span.Hours}h {span.Minutes}m";
     }
 }

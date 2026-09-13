@@ -35,11 +35,16 @@ export default function LeaderboardCard({
             key={entry.username}
             className="flex items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-muted/50"
           >
-            <RankBadge rank={entry.rank} />
-            <PlayerHead username={entry.username} size={28} />
-            <span className="flex-1 truncate text-sm font-medium">
-              {entry.username}
-            </span>
+                        <RankBadge rank={entry.rank} />
+            <Link
+              href={`/players/${encodeURIComponent(entry.username)}`}
+              className="flex flex-1 items-center gap-3 min-w-0"
+            >
+              <PlayerHead username={entry.username} size={28} />
+              <span className="flex-1 truncate text-sm font-medium hover:text-accentText">
+                {entry.username}
+              </span>
+            </Link>
             <span className="text-right">
               <span className="block text-[10px] uppercase tracking-wide text-mutedForeground">
                 {statLabel}

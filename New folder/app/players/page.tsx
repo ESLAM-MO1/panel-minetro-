@@ -1,4 +1,6 @@
+import Link from "next/link";
 import PlayerHead from "@/components/PlayerHead";
+import PlayerSearch from "@/components/PlayerSearch";
 import { getPlayers } from "@/lib/api";
 
 export default async function PlayersPage() {
@@ -15,11 +17,14 @@ export default async function PlayersPage() {
         </p>
       </div>
 
+      <PlayerSearch placeholder="Look up any player's stats by username..." />
+
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {players.map((player) => (
-          <div
+          <Link
             key={player.username}
-            className="flex items-center gap-3 rounded-2xl border border-border bg-card p-4"
+            href={`/players/${encodeURIComponent(player.username)}`}
+            className="flex items-center gap-3 rounded-2xl border border-border bg-card p-4 transition-colors hover:border-primary/50"
           >
             <div className="relative">
               <PlayerHead username={player.username} size={40} />
@@ -29,11 +34,9 @@ export default async function PlayersPage() {
               <p className="truncate text-sm font-semibold">
                 {player.username}
               </p>
-              {/* Ping/world/today's-playtime need a small in-game plugin to
-                  expose — Server List Ping alone only gives us the name. */}
               <p className="text-xs text-mutedForeground">Online now</p>
             </div>
-          </div>
+          </Link>
         ))}
 
         {online && players.length === 0 && (
