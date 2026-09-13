@@ -1,0 +1,6 @@
+﻿PlayerPanelBackend/bin/
+PlayerPanelBackend/obj/
+PlayerPanelBackend/appsettings.Development.json
+New folder/node_modules/
+New folder/.next/
+New folder/.env*.local
