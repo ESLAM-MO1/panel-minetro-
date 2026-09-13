@@ -8,31 +8,47 @@ namespace PlayerPanelBackend.Services;
 public record LeaderboardEntry(int Rank, string Username, string Value);
 
 /// <summary>
-/// One category to sync — one MySQL table that ajLeaderboards (in mysql
-/// storage mode, see cache_storage.yml) writes to. Configured under
-/// "Leaderboards:Sources" in appsettings.json, e.g.:
+/// Global settings for how leaderboard data is laid out in MySQL. Confirmed
+/// against the real server: ajLeaderboards doesn't create one table per
+/// stat — it writes everything into a single table (here: "ajlb_extras")
+/// with one row per (player, placeholder) pair. Configured under
+/// "Leaderboards" in appsettings.json:
 ///
-///   {
-///     "Category": "kills",
-///     "TableName": "ajlb_statistic_player_kills",
-///     "NameColumn": "name",
+///   "Leaderboards": {
+///     "TableName": "ajlb_extras",
+///     "IdColumn": "id",
+///     "PlaceholderColumn": "placeholder",
 ///     "ValueColumn": "value",
-///     "NumberFormat": "N0"
+///     "NamePlaceholderKey": "player_name",
+///     "Sources": [ ... ]
 ///   }
-///
-/// TableName/NameColumn/ValueColumn are our best guess based on
-/// ajLeaderboards' documented "ajlb_" table prefix convention. Once the
-/// plugin is actually pointed at a MySQL database (production or local),
-/// run `SHOW TABLES LIKE 'ajlb_%';` and `DESCRIBE <table>;` against it and
-/// correct these three fields if the real names differ — that's a config
-/// change only, no code change needed.
+/// </summary>
+public class LeaderboardsConfig
+{
+    public string TableName { get; set; } = "ajlb_extras";
+    public string IdColumn { get; set; } = "id";
+    public string PlaceholderColumn { get; set; } = "placeholder";
+    public string ValueColumn { get; set; } = "value";
+
+    /// <summary>
+    /// The placeholder key that stores each player's display name (added via
+    /// `ajlb add %player_name%` in the server console). Rows for this key
+    /// are joined in to resolve a UUID to a username.
+    /// </summary>
+    public string NamePlaceholderKey { get; set; } = "player_name";
+
+    public List<LeaderboardSource> Sources { get; set; } = new();
+}
+
+/// <summary>
+/// One category to sync — one placeholder key stored in the shared
+/// ajlb_extras table (e.g. "statistic_player_kills"), added on the server
+/// via `ajlb add %statistic_player_kills%`.
 /// </summary>
 public class LeaderboardSource
 {
     public string Category { get; set; } = "";
-    public string TableName { get; set; } = "";
-    public string NameColumn { get; set; } = "name";
-    public string ValueColumn { get; set; } = "value";
+    public string PlaceholderKey { get; set; } = "";
 
     /// <summary>How many rows to pull, highest value first.</summary>
     public int Limit { get; set; } = 100;
@@ -46,10 +62,8 @@ public class LeaderboardSource
 
     /// <summary>
     /// Optional: divide the raw stored value by this before formatting.
-    /// Useful if a stat is stored in a different unit than we want to
-    /// display (e.g. Minecraft's played-time statistic is stored in ticks —
-    /// 20 ticks/second — so Divisor: 20 converts it to seconds). Unverified
-    /// against real data yet; adjust once we see actual values coming through.
+    /// Minecraft's played-time statistic is stored in ticks (20/second),
+    /// so Divisor: 20 converts it to seconds before formatting as a duration.
     /// </summary>
     public double? Divisor { get; set; }
 }

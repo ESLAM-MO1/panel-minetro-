@@ -4,23 +4,15 @@ using MySqlConnector;
 namespace PlayerPanelBackend.Services;
 
 /// <summary>
-/// Periodically connects directly to the MySQL database ajLeaderboards is
-/// configured to use (cache_storage.yml -> method: mysql) and reads each
-/// configured category's table straight out of it. Replaces the earlier
-/// SFTP + file-parsing approach, which had to be abandoned because
-/// ajLeaderboards' default (h2) storage isn't a plain text/JSON file and
-/// the hosting panel doesn't offer plain file inspection of it.
-///
-/// Credentials come from configuration (appsettings + environment variables
-/// / user-secrets in production) — never hardcoded. See appsettings.json
-/// and appsettings.Development.json for the expected keys.
+/// Periodically connects to MySQL and reads leaderboard data out of
+/// ajLeaderboards' shared "ajlb_extras" table (confirmed against the real
+/// production server on 2026-09-13 — see LeaderboardsConfig for the shape).
+/// One row per (player UUID, placeholder) pair; categories are just
+/// different placeholder keys filtered out of the same table, and player
+/// names come from a "player_name" placeholder row joined in by UUID.
 /// </summary>
 public class LeaderboardMySqlSyncService : BackgroundService
 {
-    // Table and column names are config-driven (see LeaderboardSource), but
-    // we still validate them against a strict identifier pattern before
-    // building SQL with them, since they can't be passed as query
-    // parameters the way values can.
     private static readonly Regex ValidIdentifier = new("^[A-Za-z0-9_]+$", RegexOptions.Compiled);
 
     private readonly LeaderboardCache _cache;
@@ -37,22 +29,21 @@ public class LeaderboardMySqlSyncService : BackgroundService
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var intervalSeconds = _config.GetValue<int>("Mysql:PollIntervalSeconds", 60);
-        var sources = _config.GetSection("Leaderboards:Sources").Get<List<LeaderboardSource>>() ?? new();
+        var leaderboards = _config.GetSection("Leaderboards").Get<LeaderboardsConfig>() ?? new();
 
-        if (sources.Count == 0)
+        if (leaderboards.Sources.Count == 0)
         {
             _logger.LogWarning(
-                "No leaderboard sources configured under Leaderboards:Sources — sync loop is idle. " +
-                "Add one entry per category once the real ajLeaderboards table names are confirmed.");
+                "No leaderboard sources configured under Leaderboards:Sources — sync loop is idle.");
         }
 
         while (!stoppingToken.IsCancellationRequested)
         {
-            if (sources.Count > 0)
+            if (leaderboards.Sources.Count > 0)
             {
                 try
                 {
-                    await SyncOnceAsync(sources, stoppingToken);
+                    await SyncOnceAsync(leaderboards, stoppingToken);
                 }
                 catch (Exception ex)
                 {
@@ -91,24 +82,33 @@ public class LeaderboardMySqlSyncService : BackgroundService
         return builder.ConnectionString;
     }
 
-    private async Task SyncOnceAsync(List<LeaderboardSource> sources, CancellationToken ct)
+    private async Task SyncOnceAsync(LeaderboardsConfig leaderboards, CancellationToken ct)
     {
+        if (!ValidIdentifier.IsMatch(leaderboards.TableName) ||
+            !ValidIdentifier.IsMatch(leaderboards.IdColumn) ||
+            !ValidIdentifier.IsMatch(leaderboards.PlaceholderColumn) ||
+            !ValidIdentifier.IsMatch(leaderboards.ValueColumn))
+        {
+            _logger.LogWarning(
+                "Leaderboards table/column names in config are invalid (letters, digits, underscores only) — skipping sync.");
+            return;
+        }
+
         await using var connection = new MySqlConnection(BuildConnectionString());
         await connection.OpenAsync(ct);
 
         var result = new Dictionary<string, List<LeaderboardEntry>>();
 
-        foreach (var source in sources)
+        foreach (var source in leaderboards.Sources)
         {
             try
             {
-                result[source.Category] = await ReadCategoryAsync(connection, source, ct);
+                result[source.Category] = await ReadCategoryAsync(connection, leaderboards, source, ct);
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Failed syncing category '{Category}' from table '{Table}'",
-                    source.Category, source.TableName);
-                // Keep previous cached data for this category rather than wiping it on a transient failure.
+                _logger.LogWarning(ex, "Failed syncing category '{Category}' (placeholder '{Key}')",
+                    source.Category, source.PlaceholderKey);
                 var previous = _cache.GetCategory(source.Category);
                 if (previous != null) result[source.Category] = previous;
             }
@@ -117,31 +117,33 @@ public class LeaderboardMySqlSyncService : BackgroundService
         _cache.Set(result);
     }
 
-    private async Task<List<LeaderboardEntry>> ReadCategoryAsync(MySqlConnection connection, LeaderboardSource source, CancellationToken ct)
+    private async Task<List<LeaderboardEntry>> ReadCategoryAsync(
+        MySqlConnection connection, LeaderboardsConfig cfg, LeaderboardSource source, CancellationToken ct)
     {
-        if (!ValidIdentifier.IsMatch(source.TableName) ||
-            !ValidIdentifier.IsMatch(source.NameColumn) ||
-            !ValidIdentifier.IsMatch(source.ValueColumn))
-        {
-            throw new InvalidOperationException(
-                $"Category '{source.Category}' has an invalid TableName/NameColumn/ValueColumn in config " +
-                "(only letters, digits and underscores are allowed).");
-        }
-
-        // Table/column names are validated above (can't be bound as parameters), the LIMIT value is an int
-        // we control from config, and everything else is a real bound parameter.
-        var sql = $"SELECT `{source.NameColumn}`, `{source.ValueColumn}` FROM `{source.TableName}` " +
-                  $"ORDER BY `{source.ValueColumn}` DESC LIMIT {source.Limit}";
+        var sql = $@"
+            SELECT n.`{cfg.ValueColumn}` AS name, v.`{cfg.ValueColumn}` AS value
+            FROM `{cfg.TableName}` v
+            JOIN `{cfg.TableName}` n
+              ON n.`{cfg.IdColumn}` = v.`{cfg.IdColumn}`
+             AND n.`{cfg.PlaceholderColumn}` = @namePlaceholder
+            WHERE v.`{cfg.PlaceholderColumn}` = @valuePlaceholder
+              AND v.`{cfg.ValueColumn}` REGEXP '^[0-9.]+$'
+            ORDER BY CAST(v.`{cfg.ValueColumn}` AS DECIMAL(30,4)) DESC
+            LIMIT {source.Limit}";
 
         await using var cmd = new MySqlCommand(sql, connection);
+        cmd.Parameters.AddWithValue("@namePlaceholder", cfg.NamePlaceholderKey);
+        cmd.Parameters.AddWithValue("@valuePlaceholder", source.PlaceholderKey);
+
         await using var reader = await cmd.ExecuteReaderAsync(ct);
 
         var raw = new List<(string Name, double Value)>();
         while (await reader.ReadAsync(ct))
         {
-            var name = reader.GetString(0);
-            var value = reader.GetDouble(1);
-            raw.Add((name, value));
+            var name = reader.IsDBNull(0) ? null : reader.GetString(0);
+            if (string.IsNullOrWhiteSpace(name)) continue;
+            if (!double.TryParse(reader.GetString(1), out var value)) continue;
+            raw.Add((name!, value));
         }
 
         return raw
