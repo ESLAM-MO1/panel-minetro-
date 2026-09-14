@@ -1,5 +1,6 @@
 import LeaderboardCard from "@/components/LeaderboardCard";
 import PlayerSearch from "@/components/PlayerSearch";
+import CopyButton from "@/components/CopyButton";
 import { getLeaderboards, getPlayers } from "@/lib/api";
 
 export default async function HomePage() {
@@ -32,9 +33,7 @@ export default async function HomePage() {
 
         <div className="mx-auto mt-6 flex max-w-sm items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3">
           <span className="font-mono text-sm">{serverInfo.ip}</span>
-          <button className="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold hover:bg-accentText">
-            Copy
-          </button>
+          <CopyButton text={serverInfo.ip} />
         </div>
         
         <div className="mx-auto mt-4 max-w-sm">

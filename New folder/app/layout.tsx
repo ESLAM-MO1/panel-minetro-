@@ -10,9 +10,9 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Cookie SMP - Leaderboards & Stats",
+  title: "Game Server - Leaderboards & Stats",
   description:
-    "Live Cookie SMP leaderboards: money, kills, playtime and blocks, plus who's online right now.",
+    "Live Game Server leaderboards: money, kills, playtime and blocks, plus who's online right now.",
 };
 
 export default function RootLayout({
@@ -20,8 +20,15 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  return (
-    <html lang="en" className="dark">
+    return (
+    <html lang="en">
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{if(localStorage.getItem('theme')==='light'){document.documentElement.classList.add('light');}}catch(e){}})();`,
+          }}
+        />
+      </head>
       <body
         className={`${inter.variable} ${jetbrainsMono.variable} font-sans bg-background text-foreground antialiased`}
       >

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import ThemeToggle from "@/components/ThemeToggle";
 
 const links = [
   { href: "/", label: "Home" },
@@ -20,7 +21,7 @@ export default function Navbar() {
             🍪
           </span>
           <span className="flex flex-col leading-none">
-            <span className="text-sm font-bold">Cookie SMP</span>
+            <span className="text-sm font-bold">Game Server</span>
             <span className="text-[11px] text-mutedForeground">
               Statistics Hub
             </span>
@@ -46,9 +47,12 @@ export default function Navbar() {
           })}
         </nav>
 
-        <div className="flex items-center gap-2 text-xs text-mutedForeground">
-          <span className="flex h-2 w-2 rounded-full bg-online" />
-          cookie-smp.minetro.net
+                <div className="flex items-center gap-3 text-xs text-mutedForeground">
+          <span className="flex items-center gap-2">
+            <span className="flex h-2 w-2 rounded-full bg-online" />
+            cookie-smp.minetro.net
+          </span>
+          <ThemeToggle />
         </div>
       </div>
     </header>

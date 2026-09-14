@@ -67,10 +67,10 @@ export default function LeaderboardsClient() {
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">
-          Cookie SMP Leaderboards
+          Game Server Leaderboards
         </h1>
         <p className="mt-1 text-sm text-mutedForeground">
-          Browse the top Cookie SMP players ranked by kills, deaths, playtime,
+          Browse the top Game Server players ranked by kills, deaths, playtime,
           mob kills, and blocks.
         </p>
       </div>

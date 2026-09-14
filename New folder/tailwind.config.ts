@@ -8,13 +8,13 @@ const config: Config = {
   ],
   theme: {
     extend: {
-      colors: {
-        background: "#000000",
-        foreground: "#FFFFFF",
-        card: "#1C1C1C",
-        muted: "#262626",
-        mutedForeground: "#A6A6A6",
-        border: "#333333",
+        colors: {
+        background: "var(--color-background)",
+        foreground: "var(--color-foreground)",
+        card: "var(--color-card)",
+        muted: "var(--color-muted)",
+        mutedForeground: "var(--color-mutedForeground)",
+        border: "var(--color-border)",
         primary: "#A91955",
         accentText: "#F04C90",
         highlight: "#F99406",
