@@ -10,9 +10,9 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Game Server - Leaderboards & Stats",
+  title: "Koki Server - Leaderboards & Stats",
   description:
-    "Live Game Server leaderboards: money, kills, playtime and blocks, plus who's online right now.",
+    "Live Koki Server leaderboards: money, kills, playtime and blocks, plus who's online right now.",
 };
 
 export default function RootLayout({

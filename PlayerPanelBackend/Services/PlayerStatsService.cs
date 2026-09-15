@@ -45,7 +45,7 @@ public class PlayerStatsService
             var rawValue = reader.GetString(1);
 
             if (!placeholderToCategory.TryGetValue(placeholder, out var source)) continue; // unmapped stat, skip
-            if (!double.TryParse(rawValue, out var numeric)) continue;
+            if (!LeaderboardFormatting.TryParseRawValue(rawValue, source, out var numeric)) continue;
 
             stats[source.Category] = LeaderboardFormatting.FormatValue(numeric, source);
         }

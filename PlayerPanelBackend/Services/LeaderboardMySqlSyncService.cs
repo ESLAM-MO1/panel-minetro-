@@ -148,10 +148,7 @@ public class LeaderboardMySqlSyncService : BackgroundService
         var sql = $@"
             SELECT `{cfg.IdColumn}` AS id, `{cfg.ValueColumn}` AS value
             FROM `{cfg.TableName}`
-            WHERE `{cfg.PlaceholderColumn}` = @placeholderKey
-              AND `{cfg.ValueColumn}` REGEXP '^[0-9.]+$'
-            ORDER BY CAST(`{cfg.ValueColumn}` AS DECIMAL(30,4)) DESC
-            LIMIT {source.Limit}";
+            WHERE `{cfg.PlaceholderColumn}` = @placeholderKey";
 
         await using var cmd = new MySqlCommand(sql, connection);
         cmd.Parameters.AddWithValue("@placeholderKey", source.PlaceholderKey);
@@ -162,9 +159,12 @@ public class LeaderboardMySqlSyncService : BackgroundService
         while (await reader.ReadAsync(ct))
         {
             var id = reader.GetString(0);
-            if (!double.TryParse(reader.GetString(1), out var value)) continue;
+            if (!LeaderboardFormatting.TryParseRawValue(reader.GetString(1), source, out var value)) continue;
             raw.Add((id, value));
         }
+
+        raw.Sort((a, b) => b.Value.CompareTo(a.Value));
+        if (raw.Count > source.Limit) raw = raw.GetRange(0, source.Limit);
 
         var entries = new List<LeaderboardEntry>();
         var rank = 0;

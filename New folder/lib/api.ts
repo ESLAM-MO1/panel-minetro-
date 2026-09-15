@@ -55,7 +55,7 @@ export interface ServerInfo {
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5225";
 
 export const FALLBACK_SERVER_INFO: ServerInfo = {
-  name: "Game Server",
+  name: "Koki Server",
   ip: "cookie-smp.minetro.net",
   playersOnline: 0,
   maxPlayers: 0,
@@ -79,7 +79,7 @@ export async function getPlayers(): Promise<PlayersResponse> {
     const data = await res.json();
     return {
       serverInfo: {
-        name: "Game Server",
+        name: "Koki Server",
         ip: "cookie-smp.minetro.net",
         playersOnline: data.playersOnline ?? 0,
         maxPlayers: data.maxPlayers ?? 0,
